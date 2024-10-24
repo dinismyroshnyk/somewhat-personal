@@ -177,109 +177,116 @@ const messages = [
     "The optimization team is currently optimizing their optimization strategies"
 ];
 
-function typeMessage(element, message, speed = 50) {
-    element.innerHTML = '';  // Use innerHTML instead of textContent to support cursor
-    element.classList.add('typing');
-    let i = 0;
+const CONFIG = {
+    typeSpeed: 50,
+    swingDuration: 1500,
+    rippleCleanupDelay: 750
+};
 
-    return new Promise(resolve => {
-        function type() {
-            if (i < message.length) {
-                element.innerHTML = message.substring(0, i + 1) + '<span class="cursor"></span>';
-                i++;
-                setTimeout(type, speed);
-            } else {
-                resolve();
-            }
+class MessageManager {
+    #messages;
+    #currentElement;
+
+    constructor(messages, elementId) {
+        this.#messages = messages;
+        this.#currentElement = document.getElementById(elementId);
+    }
+
+    async displayRandom() {
+        const message = this.#messages[Math.floor(Math.random() * this.#messages.length)];
+        await this.#typeMessage(message);
+    }
+
+    async #typeMessage(message) {
+        this.#currentElement.innerHTML = '';
+        this.#currentElement.classList.add('typing');
+
+        for (let i = 0; i < message.length; i++) {
+            this.#currentElement.innerHTML = message.substring(0, i + 1) + '<span class="cursor"></span>';
+            await new Promise(resolve => setTimeout(resolve, CONFIG.typeSpeed));
         }
-        type();
-    });
-}
-
-
-// Set and type random message on load
-const messageElement = document.getElementById('message');
-const randomMessage = messages[Math.floor(Math.random() * messages.length)];
-typeMessage(messageElement, randomMessage);
-
-let isDark = false;
-
-// Function to change the message to a new random one
-function changeMessage() {
-    const randomMessage = messages[Math.floor(Math.random() * messages.length)];
-    typeMessage(messageElement, randomMessage);
-}
-
-// Function to toggle dark mode
-function toggleDarkMode() {
-    document.body.classList.toggle('dark-mode');
-    isDark = !isDark;
-
-    const icon = document.querySelector('.icon');
-    icon.src = isDark ? 'work-in-progress-dark-mode.svg' : 'work-in-progress-light-mode.svg';
-
-    // Save the mode in localStorage
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-}
-
-// Function to apply the saved theme on page load
-function applySavedTheme() {
-    const savedTheme = localStorage.getItem('theme');
-
-    if (savedTheme === 'dark') {
-        document.body.classList.add('dark-mode');
-        isDark = true;
-        document.querySelector('.icon').src = 'work-in-progress-dark-mode.svg';
-    } else {
-        isDark = false;
-        document.querySelector('.icon').src = 'work-in-progress-light-mode.svg';
     }
 }
 
-// Apply the saved theme when the page loads
-applySavedTheme();
+class ThemeManager {
+    #isDark;
+    #iconElement;
 
-// Event listener to handle clicks on the body (but not the SVG icon)
-document.body.addEventListener('click', (e) => {
-    // Ignore clicks on the SVG icon (iconElement), only change the theme on other parts of the body
-    if (e.target !== iconElement) {
-        // Create ripple effect
+    constructor() {
+        this.#isDark = false;
+        this.#iconElement = document.querySelector('.icon');
+        this.applyInitialTheme();
+    }
+
+    applyInitialTheme() {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark') {
+            this.#setDarkMode(true);
+        }
+    }
+
+    toggle(event) {
+        if (event && this.#iconElement.contains(event.target)) return;
+        this.#createRippleEffect(event);
+        setTimeout(() => this.#setDarkMode(!this.#isDark), 100);
+    }
+
+    #setDarkMode(isDark) {
+        this.#isDark = isDark;
+        document.body.classList.toggle('dark-mode', isDark);
+        this.#iconElement.src = isDark ? 'work-in-progress-dark-mode.svg' : 'work-in-progress-light-mode.svg';
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    }
+
+    #createRippleEffect(event) {
         const ripple = document.createElement('div');
-        ripple.className = `ripple ${isDark ? 'light' : ''}`;
+        ripple.className = `ripple ${this.#isDark ? 'light' : ''}`;
 
-        // Calculate size needed for the ripple
         const size = Math.max(document.body.clientWidth, document.body.clientHeight);
-        ripple.style.width = ripple.style.height = `${size * 2}px`;
-
-        // Position ripple from click point
-        ripple.style.left = `${e.clientX - size}px`;
-        ripple.style.top = `${e.clientY - size}px`;
+        Object.assign(ripple.style, {
+            width: `${size * 2}px`,
+            height: `${size * 2}px`,
+            left: `${event.clientX - size}px`,
+            top: `${event.clientY - size}px`
+        });
 
         document.body.appendChild(ripple);
+        ripple.addEventListener('animationend', () => ripple.remove());
+    }
+}
 
-        // Toggle dark mode after a short delay
-        setTimeout(toggleDarkMode, 100);
+class IconAnimator {
+    #element;
+    #messageManager;
 
-        // Clean up ripple element after animation ends
-        ripple.addEventListener('animationend', () => {
-            ripple.remove();
+    constructor(iconSelector, messageManager) {
+        this.#element = document.querySelector(iconSelector);
+        this.#messageManager = messageManager;
+        this.#setupEventListener();
+    }
+
+    #setupEventListener() {
+        this.#element.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.#animate();
+            this.#messageManager.displayRandom();
         });
     }
-});
 
-// Add click event to the icon to make it swing and change the message
-const iconElement = document.querySelector('.icon');
-iconElement.addEventListener('click', (e) => {
-    e.stopPropagation(); // Prevent this click from triggering the body event listener
+    #animate() {
+        this.#element.classList.add('swing');
+        setTimeout(() => {
+            this.#element.classList.remove('swing');
+        }, CONFIG.swingDuration);
+    }
+}
 
-    // Add swinging animation
-    iconElement.classList.add('swing');
+document.addEventListener('DOMContentLoaded', () => {
+    const messageManager = new MessageManager(messages, 'message');
+    const themeManager = new ThemeManager();
+    const iconAnimator = new IconAnimator('.icon', messageManager);
 
-    // Remove the swinging class after animation completes to allow it to swing again on subsequent clicks
-    setTimeout(() => {
-        iconElement.classList.remove('swing');
-    }, 1500);  // Duration of the swing animation
+    messageManager.displayRandom();
 
-    // Change the message to a new random one
-    changeMessage();
+    document.body.addEventListener('click', (e) => themeManager.toggle(e));
 });
